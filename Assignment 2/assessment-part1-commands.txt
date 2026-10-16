@@ -1,0 +1,116 @@
+==========================================================================================
+IAM ROLE + POLICY SETUP
+==========================================================================================
+
+---IAM Role Creation----------------------------------------------------------------------
+aws iam create-role --role-name coupons_lambda_role --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---Policy Creation------------------------------------------------------------------------
+aws iam create-policy --policy-name CloudwatchConditional 
+--endpoint-url=http://localhost:4566 --policy-document file://cloudwatch-policy.json
+
+aws iam create-policy --policy-name LambdaPermissions --endpoint-url=http://localhost:4566 
+--policy-document file://lambda-permissions.json
+------------------------------------------------------------------------------------------
+
+---Attach Policies------------------------------------------------------------------------
+aws iam attach-role-policy --role-name coupons_lambda_role --policy-arn 
+arn:aws:iam::000000000000:policy/CloudwatchConditional --endpoint-url=http://localhost:4566
+
+aws iam attach-role-policy --role-name coupons_lambda_role --policy-arn 
+arn:aws:iam::000000000000:policy/LambdaPermissions --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---Check Attached Policies----------------------------------------------------------------
+aws iam list-attached-role-policies --role-name coupons_lambda_role 
+--endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+LAMBDA FUNCTION SETUP
+==========================================================================================
+
+---Function Creation----------------------------------------------------------------------
+aws lambda create-function --function-name coupons_list --runtime nodejs18.x --role 
+arn:aws:iam::000000000000:role/coupons_lambda_role --handler index.handler 
+--zip-file fileb://function.zip --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---Existance Verification-----------------------------------------------------------------
+aws lambda list-functions --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---Manual Lambda Invocation---------------------------------------------------------------
+aws lambda invoke --function-name coupons_list output.json 
+--endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+==========================================================================================
+API GATEWAY SETUP
+==========================================================================================
+
+---REST API Creation----------------------------------------------------------------------
+aws apigateway create-rest-api --name coupons --endpoint-url=http://localhost:4566
+
+rest-api-id = 3pqvpvagre
+parent-id = 8zjtsovynn - root id in initial creation output, get-resources not used
+------------------------------------------------------------------------------------------
+
+---Create /coupons Resource---------------------------------------------------------------
+aws apigateway create-resource --rest-api-id 3pqvpvagre --parent-id 8zjtsovynn 
+--path-part coupons --endpoint-url=http://localhost:4566
+
+resource-id = jsiz6j6hrw
+------------------------------------------------------------------------------------------
+
+--Create /coupons_poc Resource------------------------------------------------------------
+aws apigateway create-resource --rest-api-id 3pqvpvagre --parent-id 8zjtsovynn 
+--path-part coupons_poc --endpoint-url=http://localhost:4566
+
+resource-id = 62cl9exv3a
+------------------------------------------------------------------------------------------
+
+---GET Method Creation--------------------------------------------------------------------
+aws apigateway put-method --rest-api-id 3pqvpvagre --resource-id jsiz6j6hrw --http-method 
+GET --authorization-type NONE --endpoint-url=http://localhost:4566
+
+aws apigateway put-method --rest-api-id 3pqvpvagre --resource-id 62cl9exv3a
+  --http-method GET --authorization-type NONE --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API to Lambda Connection---------------------------------------------------------------
+aws apigateway put-integration --rest-api-id 3pqvpvagre --resource-id jsiz6j6hrw 
+--http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:
+us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_list
+/invocations --endpoint-url=http://localhost:4566
+
+aws apigateway put-integration --rest-api-id 3pqvpvagre --resource-id  62cl9exv3a
+--http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:
+us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_list
+/invocations --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API Gateway Invocation Permission------------------------------------------------------
+aws lambda add-permission --function-name coupons_list --statement-id apigateway-access
+--action lambda:InvokeFunction --principal apigateway.amazonaws.com
+--endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+==========================================================================================
+API DEPLOYMENT + CHECKS
+==========================================================================================
+
+---REST API Deployment--------------------------------------------------------------------
+aws apigateway create-deployment --rest-api-id 3pqvpvagre --stage-name dev  
+--endpoint-url=http://localhost:4566
+
+deployment-id = qzqp6twdcg
+------------------------------------------------------------------------------------------
+
+---API Test-------------------------------------------------------------------------------
+curl "http://localhost:4566/restapis/3pqvpvagre/dev/_user_request_/coupons"
+
+curl "http://localhost:4566/restapis/3pqvpvagre/dev/_user_request_/coupons_poc"
+------------------------------------------------------------------------------------------

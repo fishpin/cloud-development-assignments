@@ -1,0 +1,6 @@
+{
+    "pathParameters": {
+        "id": "C002"
+    },
+    "body": "{\"provider_id\":\"P100\",\"campaign_id\":\"CAMP02\",\"code\":\"SAVE10\",\"description\":\"10 dollars off orders over 50\",\"discount\":10,\"expiry_date\":\"2026-12-31\"}"
+}

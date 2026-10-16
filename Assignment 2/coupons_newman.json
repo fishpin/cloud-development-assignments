@@ -1,0 +1,119 @@
+{
+  "info": {
+    "_postman_id": "643df759-e265-49c8-aa46-f4ca2edc2d85",
+    "name": "Cloud Assignment 1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56497160",
+    "_collection_link": "https://go.postman.co/collection/56497160-643df759-e265-49c8-aa46-f4ca2edc2d85?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "New Request",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Validate status code\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Validate message output\", function () {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.message).to.eql(\"Coupons API is working successfully\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons_poc",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4566",
+          "path": ["restapis", "n6ljk2pw5a", "dev", "_user_request_", "coupons_poc"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET Coupon By ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Validate status code\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Validate coupon id\", function () {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.id).to.eql(\"C001\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C001",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4566",
+          "path": ["restapis", "n6ljk2pw5a", "dev", "_user_request_", "coupons", "C001"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "PUT Update Coupon",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Validate status code\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Validate message output\", function () {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.message).to.eql(\"Coupon updated\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"provider_id\": \"P200\",\n  \"campaign_id\": \"CAMP01\",\n  \"code\": \"SUMMER30\",\n  \"description\": \"30% off summer collection\",\n  \"discount\": 30,\n  \"expiry_date\": \"2026-09-30\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C003",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4566",
+          "path": ["restapis", "n6ljk2pw5a", "dev", "_user_request_", "coupons", "C003"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
