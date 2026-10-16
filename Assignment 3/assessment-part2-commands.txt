@@ -1,0 +1,164 @@
+==========================================================================================
+PREREQUISITES (FROM ASSESSMENT PART 1)
+==========================================================================================
+
+IAM role used by the lambda functions = coupons_lambda_role
+REST API = coupons
+rest-api-id = n6ljk2pw5a
+/coupons resource-id = pv36zvyxhq
+
+
+==========================================================================================
+DYNAMODB TABLE SETUP
+==========================================================================================
+
+---Capacity Calculation-------------------------------------------------------------------
+Item size = 1 KB
+
+Reads: 1 RCU = 2 eventually consistent reads per second for items up to 4 KB
+50 reads per second / 2 = 25 RCU
+
+Writes: 1 WCU = 1 write per second for items up to 1 KB
+10 writes per second x 1 KB = 10 WCU
+------------------------------------------------------------------------------------------
+
+---Create Table---------------------------------------------------------------------------
+aws dynamodb create-table --table-name coupons --attribute-definitions AttributeName=id,AttributeType=S --key-schema AttributeName=id,KeyType=HASH --provisioned-throughput ReadCapacityUnits=25,WriteCapacityUnits=10 --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---List Tables----------------------------------------------------------------------------
+aws dynamodb list-tables --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Add Data-------------------------------------------------------------------------------
+aws dynamodb put-item --table-name coupons --% --item "{\"id\":{\"S\":\"C001\"},\"provider_id\":{\"S\":\"P100\"},\"campaign_id\":{\"S\":\"CAMP01\"},\"code\":{\"S\":\"WELCOME10\"},\"description\":{\"S\":\"10% off your first order\"},\"discount\":{\"N\":\"10\"},\"expiry_date\":{\"S\":\"2026-12-31\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+
+aws dynamodb put-item --table-name coupons --% --item "{\"id\":{\"S\":\"C002\"},\"provider_id\":{\"S\":\"P100\"},\"campaign_id\":{\"S\":\"CAMP02\"},\"code\":{\"S\":\"SAVE5\"},\"description\":{\"S\":\"5 dollars off orders over 50\"},\"discount\":{\"N\":\"5\"},\"expiry_date\":{\"S\":\"2026-11-30\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+
+aws dynamodb put-item --table-name coupons --% --item "{\"id\":{\"S\":\"C003\"},\"provider_id\":{\"S\":\"P200\"},\"campaign_id\":{\"S\":\"CAMP01\"},\"code\":{\"S\":\"SUMMER25\"},\"description\":{\"S\":\"25% off summer collection\"},\"discount\":{\"N\":\"25\"},\"expiry_date\":{\"S\":\"2026-08-31\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Scan All Coupons-----------------------------------------------------------------------
+aws dynamodb scan --table-name coupons --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+DYNAMODB INDEX (GSI) SETUP
+==========================================================================================
+
+---Add Index to Table---------------------------------------------------------------------
+aws dynamodb update-table --table-name coupons --attribute-definitions AttributeName=provider_id,AttributeType=S AttributeName=campaign_id,AttributeType=S --global-secondary-index-updates file://gsi.json --endpoint-url http://localhost:4566 --region us-east-1
+
+index name = provider_id-campaign_id-index (provider_id = HASH, campaign_id = RANGE)
+------------------------------------------------------------------------------------------
+
+---Check GSI------------------------------------------------------------------------------
+aws dynamodb describe-table --table-name coupons --query 'Table.GlobalSecondaryIndexes[0].IndexArn' --output text --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Query by GSI---------------------------------------------------------------------------
+aws dynamodb query --table-name coupons --% --index-name provider_id-campaign_id-index --key-condition-expression "provider_id = :p AND campaign_id = :c" --expression-attribute-values "{\":p\":{\"S\":\"P100\"},\":c\":{\"S\":\"CAMP01\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+LAMBDA FUNCTION SETUP
+==========================================================================================
+
+---Package Function Code (run inside coupons_get_by_id and coupons_update folders)--------
+npm.cmd init -y
+
+npm.cmd install @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
+
+Compress-Archive -Path index.js,package.json,node_modules -DestinationPath function.zip -Force
+------------------------------------------------------------------------------------------
+
+---Function Creation----------------------------------------------------------------------
+aws lambda create-function --function-name coupons_get_by_id --runtime nodejs18.x --role arn:aws:iam::000000000000:role/coupons_lambda_role --handler index.handler --zip-file fileb://coupons_get_by_id/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda create-function --function-name coupons_update --runtime nodejs18.x --role arn:aws:iam::000000000000:role/coupons_lambda_role --handler index.handler --zip-file fileb://coupons_update/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Update Function Code-------------------------------------------------------------------
+aws lambda update-function-code --function-name coupons_get_by_id --zip-file fileb://coupons_get_by_id/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda update-function-code --function-name coupons_update --zip-file fileb://coupons_update/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Manual Lambda Invocation---------------------------------------------------------------
+aws lambda invoke --function-name coupons_get_by_id --payload file://coupons_get_by_id/test-event.json --cli-binary-format raw-in-base64-out coupons_get_by_id/output.json --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda invoke --function-name coupons_update --payload file://coupons_update/test-event.json --cli-binary-format raw-in-base64-out coupons_update/output.json --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Read Data (confirm update)-------------------------------------------------------------
+aws dynamodb get-item --table-name coupons --% --key "{\"id\":{\"S\":\"C002\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+API GATEWAY SETUP
+==========================================================================================
+
+---Create /coupons/{id} Resource----------------------------------------------------------
+aws apigateway create-resource --rest-api-id n6ljk2pw5a --parent-id pv36zvyxhq --path-part "{id}" --endpoint-url=http://localhost:4566
+
+resource-id = pw316lo0tu
+------------------------------------------------------------------------------------------
+
+---GET + PUT Method Creation--------------------------------------------------------------
+aws apigateway put-method --rest-api-id n6ljk2pw5a --resource-id pw316lo0tu --http-method GET --authorization-type NONE --endpoint-url=http://localhost:4566
+
+aws apigateway put-method --rest-api-id n6ljk2pw5a --resource-id pw316lo0tu --http-method PUT --authorization-type NONE --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API to Lambda Connection---------------------------------------------------------------
+aws apigateway put-integration --rest-api-id n6ljk2pw5a --resource-id pw316lo0tu --http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_get_by_id/invocations --endpoint-url=http://localhost:4566
+
+aws apigateway put-integration --rest-api-id n6ljk2pw5a --resource-id pw316lo0tu --http-method PUT --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_update/invocations --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API Gateway Invocation Permission------------------------------------------------------
+aws lambda add-permission --function-name coupons_get_by_id --statement-id apigateway-access --action lambda:InvokeFunction --principal apigateway.amazonaws.com --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda add-permission --function-name coupons_update --statement-id apigateway-access --action lambda:InvokeFunction --principal apigateway.amazonaws.com --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+API DEPLOYMENT + CHECKS
+==========================================================================================
+
+---REST API Deployment--------------------------------------------------------------------
+aws apigateway create-deployment --rest-api-id n6ljk2pw5a --stage-name dev --endpoint-url=http://localhost:4566
+
+deployment-id = 892mxujnjo
+------------------------------------------------------------------------------------------
+
+---API Test-------------------------------------------------------------------------------
+GET
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C001"
+
+GET (not found)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C999"
+
+PUT
+curl.exe -X PUT "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C003" -H "Content-Type: application/json" -d "@coupons_update/put-body.json"
+
+GET (confirm update)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C003"
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+TESTS
+==========================================================================================
+
+---Unit Tests (Jest, DynamoDB mocked)-----------------------------------------------------
+npx.cmd jest
+------------------------------------------------------------------------------------------
+
+---API Tests (Newman)---------------------------------------------------------------------
+npx.cmd newman run coupons_newman.json
+------------------------------------------------------------------------------------------

@@ -1,0 +1,24 @@
+[
+  {
+    "Create": {
+      "IndexName": "provider_id-campaign_id-index",
+      "KeySchema": [
+        {
+          "AttributeName": "provider_id",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "campaign_id",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 25,
+        "WriteCapacityUnits": 10
+      }
+    }
+  }
+]

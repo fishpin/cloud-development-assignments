@@ -1,0 +1,172 @@
+==========================================================================================
+PREREQUISITES (FROM ASSESSMENT PART 1 + 2)
+==========================================================================================
+
+IAM role used by the lambda functions = coupons_lambda_role
+REST API = coupons
+rest-api-id = n6ljk2pw5a
+root (parent) id = qibbww863n
+/coupons resource-id = pv36zvyxhq
+Existing lambda functions = coupons_list, coupons_get_by_id, coupons_update
+
+
+==========================================================================================
+USERS TABLE SETUP
+==========================================================================================
+
+---Create Table---------------------------------------------------------------------------
+aws dynamodb create-table --table-name users --attribute-definitions AttributeName=username,AttributeType=S --key-schema AttributeName=username,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Generate Password Hash (bcrypt, 12 salt rounds - run inside coupons_get_token folder)---
+node -e "console.log(require('bcryptjs').hashSync('password123', 12))"
+
+hash = $2b$12$yDLASrQVOHYwCRY1VCtKSOtsHXLpU8/b5ExlJliRsUD/2H0tC97a.
+------------------------------------------------------------------------------------------
+
+---Add User-------------------------------------------------------------------------------
+aws dynamodb put-item --table-name users --% --item "{\"username\":{\"S\":\"admin\"},\"password\":{\"S\":\"$2b$12$yDLASrQVOHYwCRY1VCtKSOtsHXLpU8/b5ExlJliRsUD/2H0tC97a.\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---Read User------------------------------------------------------------------------------
+aws dynamodb get-item --table-name users --% --key "{\"username\":{\"S\":\"admin\"}}" --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+NEW LAMBDA FUNCTION SETUP
+==========================================================================================
+
+---Package coupons_get_token (run inside coupons_get_token folder)-------------------------
+npm.cmd init -y
+
+npm.cmd install bcryptjs jsonwebtoken @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
+
+Compress-Archive -Path index.js,package.json,node_modules -DestinationPath function.zip -Force
+------------------------------------------------------------------------------------------
+
+---Package coupons_to_secure (run inside coupons_to_secure folder)-------------------------
+npm.cmd init -y
+
+npm.cmd install jsonwebtoken
+
+Compress-Archive -Path index.js,package.json,node_modules -DestinationPath function.zip -Force
+------------------------------------------------------------------------------------------
+
+---Function Creation----------------------------------------------------------------------
+aws lambda create-function --function-name coupons_get_token --runtime nodejs18.x --role arn:aws:iam::000000000000:role/coupons_lambda_role --handler index.handler --zip-file fileb://coupons_get_token/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda create-function --function-name coupons_to_secure --runtime nodejs18.x --role arn:aws:iam::000000000000:role/coupons_lambda_role --handler index.handler --zip-file fileb://coupons_to_secure/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+API GATEWAY SETUP - NEW ENDPOINTS
+==========================================================================================
+
+---Create /token Resource-----------------------------------------------------------------
+aws apigateway create-resource --rest-api-id n6ljk2pw5a --parent-id qibbww863n --path-part token --endpoint-url=http://localhost:4566
+
+resource-id = fca99u21l7
+------------------------------------------------------------------------------------------
+
+---Create /coupons/to_secure Resource------------------------------------------------------
+aws apigateway create-resource --rest-api-id n6ljk2pw5a --parent-id pv36zvyxhq --path-part to_secure --endpoint-url=http://localhost:4566
+
+resource-id = 8vq9ez5hye
+------------------------------------------------------------------------------------------
+
+---POST + GET Method Creation--------------------------------------------------------------
+aws apigateway put-method --rest-api-id n6ljk2pw5a --resource-id fca99u21l7 --http-method POST --authorization-type NONE --endpoint-url=http://localhost:4566
+
+aws apigateway put-method --rest-api-id n6ljk2pw5a --resource-id 8vq9ez5hye --http-method GET --authorization-type NONE --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API to Lambda Connection---------------------------------------------------------------
+aws apigateway put-integration --rest-api-id n6ljk2pw5a --resource-id fca99u21l7 --http-method POST --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_get_token/invocations --endpoint-url=http://localhost:4566
+
+aws apigateway put-integration --rest-api-id n6ljk2pw5a --resource-id 8vq9ez5hye --http-method GET --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:coupons_to_secure/invocations --endpoint-url=http://localhost:4566
+------------------------------------------------------------------------------------------
+
+---API Gateway Invocation Permission------------------------------------------------------
+aws lambda add-permission --function-name coupons_get_token --statement-id apigateway-access --action lambda:InvokeFunction --principal apigateway.amazonaws.com --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda add-permission --function-name coupons_to_secure --statement-id apigateway-access --action lambda:InvokeFunction --principal apigateway.amazonaws.com --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---REST API Deployment--------------------------------------------------------------------
+aws apigateway create-deployment --rest-api-id n6ljk2pw5a --stage-name dev --endpoint-url=http://localhost:4566
+
+deployment-id = wvw4dferij
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+SECURE EXISTING ENDPOINTS (coupons_get_by_id + coupons_update require JWT)
+==========================================================================================
+
+---Package Updated Code (run inside coupons_get_by_id and coupons_update folders)---------
+npm.cmd install jsonwebtoken
+
+Compress-Archive -Path index.js,package.json,node_modules -DestinationPath function.zip -Force
+------------------------------------------------------------------------------------------
+
+---Update Function Code-------------------------------------------------------------------
+aws lambda update-function-code --function-name coupons_get_by_id --zip-file fileb://coupons_get_by_id/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+
+aws lambda update-function-code --function-name coupons_update --zip-file fileb://coupons_update/function.zip --endpoint-url http://localhost:4566 --region us-east-1
+------------------------------------------------------------------------------------------
+
+---REST API Deployment--------------------------------------------------------------------
+aws apigateway create-deployment --rest-api-id n6ljk2pw5a --stage-name dev --endpoint-url=http://localhost:4566
+
+deployment-id = y9pfffd8gp
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+API TESTS
+==========================================================================================
+
+---Get Token------------------------------------------------------------------------------
+POST (valid - returns token and expiration)
+curl.exe -X POST "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/token" -H "Content-Type: application/json" -d "@coupons_get_token/token-body.json"
+
+POST (invalid password - 403)
+curl.exe -X POST "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/token" -H "Content-Type: application/json" -d "@coupons_get_token/bad-token-body.json"
+------------------------------------------------------------------------------------------
+
+---To Secure (replace <token> with the token from Get Token)-------------------------------
+GET (valid token - 200)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/to_secure" -H "Authorization: Bearer <token>"
+
+GET (invalid token - 403)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/to_secure" -H "Authorization: Bearer badtoken"
+------------------------------------------------------------------------------------------
+
+---Secured Existing Endpoints-------------------------------------------------------------
+GET (no token - 403)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C001"
+
+GET (valid token - 200)
+curl.exe "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C001" -H "Authorization: Bearer <token>"
+
+PUT (no token - 403)
+curl.exe -X PUT "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C003" -H "Content-Type: application/json" -d "@coupons_update/put-body.json"
+
+PUT (valid token - 200)
+curl.exe -X PUT "http://localhost:4566/restapis/n6ljk2pw5a/dev/_user_request_/coupons/C003" -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "@coupons_update/put-body.json"
+------------------------------------------------------------------------------------------
+
+
+==========================================================================================
+TESTS
+==========================================================================================
+
+---Unit Tests (Jest, DynamoDB mocked)-----------------------------------------------------
+npx.cmd jest
+------------------------------------------------------------------------------------------
+
+---API Tests (Newman)---------------------------------------------------------------------
+npx.cmd newman run coupons_newman.json
+------------------------------------------------------------------------------------------
